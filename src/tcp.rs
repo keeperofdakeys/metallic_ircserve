@@ -22,10 +22,14 @@ fn main() {
   }
   );
 
-  loop { spawn(proc() {
-    let mut input = io::BufferedReader::new(conn_recv.recv());
-    println!("{}", input.read_line().unwrap());
-  })
+  loop {
+    let mut input_2 = conn_recv.recv();
+    spawn( proc() {
+      loop {
+        let mut input = io::BufferedReader::new(input_2.clone());
+        print!("{}", input.read_line().unwrap());
+      }
+    });
   }
 }
 
