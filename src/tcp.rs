@@ -4,7 +4,7 @@ extern crate green;
 use std::io::net::tcp;
 use std::option::Option;
 use std::io;
-use std::comm::channel;
+use std::string::String;
 use std::comm::{channel,Receiver,Sender};
 use std::io::{Acceptor, Listener};
 
@@ -22,6 +22,17 @@ fn main() {
   }
   );
 
+  let (read_conn_send, read_conn_recv) = channel();
+
+  spawn(proc() { tcp_task_spawner( conn_recv, read_conn_send ) });
+  let input1 = read_conn_recv.recv();
+  let input2 = read_conn_recv.recv();
+  loop {
+    print!("{}", input1.recv());
+    print!("{}", input2.recv());
+  }
+  
+  /*
   loop {
     let mut input_2 = conn_recv.recv();
     spawn( proc() {
@@ -31,6 +42,35 @@ fn main() {
       }
     });
   }
+  */
+}
+
+fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_conn_send: Sender<Receiver<String>> ) {
+  for conn in conn_recv.iter() {
+    let read = conn.clone();
+    let write = conn.clone();
+    let (read_send, read_recv) = channel();
+    read_conn_send.send(read_recv);
+    spawn(proc() { tcp_task_read( read, read_send ) });
+    //spawn(proc() { tcp_task_write( write ) });
+  }
+}
+
+fn tcp_task_read( reader: tcp::TcpStream, read_send: Sender<String> ) {
+  let mut buff = io::BufferedReader::new(reader);
+  loop {
+    match buff.read_line() {
+      Ok(a) => read_send.send(a),
+      Err(e) => match e.kind {
+        io::EndOfFile => return,
+        _ => (),
+      },
+    };
+  }
+}
+
+fn tcp_task_write( mut writer: tcp::TcpStream ) {
+  let _ = writeln!(writer, "{}", "haha");
 }
 
 fn tcp_listen( ip: &str, port: u16, conn_send: Sender<tcp::TcpStream>, err_send: Sender<io::IoError> ) {
