@@ -7,6 +7,7 @@ use std::io;
 use std::string::String;
 use std::comm::{channel,Receiver,Sender};
 use std::io::{Acceptor, Listener};
+use std::num::ToStrRadix;
 
 #[start]
 fn start(argc: int, argv: *const *const u8) -> int {
@@ -14,53 +15,55 @@ fn start(argc: int, argv: *const *const u8) -> int {
 }
 
 fn main() {
+  let (recv, write_conn_recv) = get_reader("127.0.0.1", 8787);
+  loop {
+    let line = recv.recv();
+    print!("{}", line);
+  }
+}
+
+
+fn get_reader( ip: &str, port: u16 ) -> (Receiver<String>, Receiver<Sender<String>>) {
   let (err_send, err_recv) = channel();
   let (conn_send, conn_recv) = channel();
+  let ip_new = ip.to_string();
   spawn( proc() {
     //let mut io_ref = LocalIo::borrow().unwrap();
-    tcp_listen("127.0.0.1", 8787, conn_send, err_send);
+    tcp_listen(ip_new.as_slice(), port, conn_send, err_send);
   }
   );
 
-  let (read_conn_send, read_conn_recv) = channel();
+  let (read_send, read_recv) = channel();
+  let (write_conn_send, write_conn_recv) = channel();
 
-  spawn(proc() { tcp_task_spawner( conn_recv, read_conn_send ) });
-  let input1 = read_conn_recv.recv();
-  let input2 = read_conn_recv.recv();
-  loop {
-    print!("{}", input1.recv());
-    print!("{}", input2.recv());
-  }
+  spawn(proc() { tcp_task_spawner( conn_recv, read_send, write_conn_send ) });
+
+  return (read_recv, write_conn_recv);
   
-  /*
-  loop {
-    let mut input_2 = conn_recv.recv();
-    spawn( proc() {
-      loop {
-        let mut input = io::BufferedReader::new(input_2.clone());
-        print!("{}", input.read_line().unwrap());
-      }
-    });
-  }
-  */
 }
 
-fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_conn_send: Sender<Receiver<String>> ) {
+fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<String>, write_conn_send: Sender<Sender<String>> ) {
+  let mut counter = 1i;
   for conn in conn_recv.iter() {
     let read = conn.clone();
     let write = conn.clone();
-    let (read_send, read_recv) = channel();
-    read_conn_send.send(read_recv);
-    spawn(proc() { tcp_task_read( read, read_send ) });
-    //spawn(proc() { tcp_task_write( write ) });
+    let read_send_c = read_send.clone();
+    let write_conn_send_c = write_conn_send.clone();
+    spawn(proc() { tcp_task_read( &counter, read, read_send_c ) });
+    spawn(proc() { tcp_task_write( &counter, write, write_conn_send_c ) });
+    counter += 1;
   }
 }
 
-fn tcp_task_read( reader: tcp::TcpStream, read_send: Sender<String> ) {
+fn tcp_task_read( counter: &int, reader: tcp::TcpStream, read_send: Sender<String> ) {
   let mut buff = io::BufferedReader::new(reader);
   loop {
     match buff.read_line() {
-      Ok(a) => read_send.send(a),
+      Ok(a) => {
+        read_send.send(a);
+        read_send.send((*counter).to_str_radix(10u));
+        read_send.send("\n".to_string());
+      }
       Err(e) => match e.kind {
         io::EndOfFile => return,
         _ => (),
@@ -69,8 +72,13 @@ fn tcp_task_read( reader: tcp::TcpStream, read_send: Sender<String> ) {
   }
 }
 
-fn tcp_task_write( mut writer: tcp::TcpStream ) {
-  let _ = writeln!(writer, "{}", "haha");
+fn tcp_task_write( counter: &int, mut writer: tcp::TcpStream, write_conn_send: Sender<Sender<String>> ) {
+  let (conn_send, conn_recv) = channel();
+  write_conn_send.send(conn_send);
+  loop {
+    let line = conn_recv.recv();
+    let _ = write!( writer, "{} {}", line, counter );
+  }
 }
 
 fn tcp_listen( ip: &str, port: u16, conn_send: Sender<tcp::TcpStream>, err_send: Sender<io::IoError> ) {
@@ -100,15 +108,3 @@ fn tcp_listen( ip: &str, port: u16, conn_send: Sender<tcp::TcpStream>, err_send:
 fn tcp_listen<'a>( io: &'a mut rustrt::rtio::IoFactory, ip: IpAddr, port: u16 ) -> Option<Box<rustrt::rtio::RtioTcpStream+Send>> {
   let listener = match io.tcp_bind(SocketAddr{ip: ip, port: port}) {
 */
-/*
-fn get_acceptor(ip: &str, port: u16) -> proc():Send {
-  let new_ip = ip.to_string();
-  let new_port = port.clone();
-  proc() {
-    let listener = rustuv::net::TcpListener::bind(new_ip, new_port);
-    println!("lol");
-  }
-}
-*/
-
-
