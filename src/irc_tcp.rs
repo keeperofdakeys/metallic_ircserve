@@ -1,29 +1,14 @@
-extern crate rustuv;
+
+
 extern crate rustrt;
-extern crate green;
 use std::io::net::tcp;
-use std::option::Option;
 use std::io;
 use std::string::String;
 use std::comm::{channel,Receiver,Sender};
 use std::io::{Acceptor, Listener};
-use std::num::ToStrRadix;
+use std::fmt::radix;
 
-#[start]
-fn start(argc: int, argv: *const *const u8) -> int {
-    green::start(argc, argv, rustuv::event_loop, main)
-}
-
-fn main() {
-  let (recv, write_conn_recv) = get_reader("127.0.0.1", 8787);
-  loop {
-    let line = recv.recv();
-    print!("{}", line);
-  }
-}
-
-
-fn get_reader( ip: &str, port: u16 ) -> (Receiver<String>, Receiver<Sender<String>>) {
+pub fn get_tcp_comms( ip: &str, port: u16 ) -> (Receiver<String>, Receiver<Sender<String>>) {
   let (err_send, err_recv) = channel();
   let (conn_send, conn_recv) = channel();
   let ip_new = ip.to_string();
@@ -61,8 +46,7 @@ fn tcp_task_read( counter: &int, reader: tcp::TcpStream, read_send: Sender<Strin
     match buff.read_line() {
       Ok(a) => {
         read_send.send(a);
-        read_send.send((*counter).to_str_radix(10u));
-        read_send.send("\n".to_string());
+        read_send.send(format!("{}{}", radix(*counter,10), "\n"));
       }
       Err(e) => match e.kind {
         io::EndOfFile => return,
@@ -108,3 +92,4 @@ fn tcp_listen( ip: &str, port: u16, conn_send: Sender<tcp::TcpStream>, err_send:
 fn tcp_listen<'a>( io: &'a mut rustrt::rtio::IoFactory, ip: IpAddr, port: u16 ) -> Option<Box<rustrt::rtio::RtioTcpStream+Send>> {
   let listener = match io.tcp_bind(SocketAddr{ip: ip, port: port}) {
 */
+
