@@ -1,14 +1,20 @@
-
-
 extern crate rustrt;
 use std::io::net::tcp;
 use std::io;
 use std::string::String;
 use std::comm::{channel,Receiver,Sender};
 use std::io::{Acceptor, Listener};
-use std::fmt::radix;
 
-pub fn get_tcp_comms( ip: &str, port: u16 ) -> (Receiver<String>, Receiver<Sender<String>>) {
+pub enum TcpEvent {
+  ConnCreat(uint),
+  Read(uint, String),
+  Write(uint, String),
+  ConnClose(uint)
+}
+
+pub type TcpWriter = (uint, Sender<TcpEvent>);
+
+pub fn get_tcp_comms( ip: &str, port: u16 ) -> (Receiver<TcpEvent>, Receiver<TcpWriter>) {
   let (err_send, err_recv) = channel();
   let (conn_send, conn_recv) = channel();
   let ip_new = ip.to_string();
@@ -27,8 +33,8 @@ pub fn get_tcp_comms( ip: &str, port: u16 ) -> (Receiver<String>, Receiver<Sende
   
 }
 
-fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<String>, write_conn_send: Sender<Sender<String>> ) {
-  let mut counter = 1i;
+fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<TcpEvent>, write_conn_send: Sender<TcpWriter> ) {
+  let mut counter = 1u;
   for conn in conn_recv.iter() {
     let read = conn.clone();
     let write = conn.clone();
@@ -40,27 +46,31 @@ fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<Stri
   }
 }
 
-fn tcp_task_read( counter: &int, reader: tcp::TcpStream, read_send: Sender<String> ) {
+fn tcp_task_read( counter: &uint, reader: tcp::TcpStream, read_send: Sender<TcpEvent> ) {
   let mut buff = io::BufferedReader::new(reader);
   loop {
     match buff.read_line() {
       Ok(a) => {
-        read_send.send(a);
-        read_send.send(format!("{}{}", radix(*counter,10), "\n"));
+        read_send.send(Read(*counter, a));
       }
       Err(e) => match e.kind {
-        io::EndOfFile => return,
+        io::EndOfFile => {
+          read_send.send(ConnClose(*counter));
+        },
         _ => (),
       },
     };
   }
 }
 
-fn tcp_task_write( counter: &int, mut writer: tcp::TcpStream, write_conn_send: Sender<Sender<String>> ) {
+fn tcp_task_write( counter: &uint, mut writer: tcp::TcpStream, write_conn_send: Sender<TcpWriter> ) {
   let (conn_send, conn_recv) = channel();
-  write_conn_send.send(conn_send);
+  write_conn_send.send( (*counter, conn_send) );
   loop {
-    let line = conn_recv.recv();
+    let line = match conn_recv.recv() {
+      Write(_, a) => a,
+      _ => continue,
+    };
     let _ = write!( writer, "{} {}", line, counter );
   }
 }
