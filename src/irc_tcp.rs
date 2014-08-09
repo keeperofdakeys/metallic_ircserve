@@ -46,8 +46,9 @@ fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<TcpE
   }
 }
 
-fn tcp_task_read( counter: &uint, reader: tcp::TcpStream, read_send: Sender<TcpEvent> ) {
-  let mut buff = io::BufferedReader::new(reader);
+fn tcp_task_read( counter: &uint, mut reader: tcp::TcpStream, read_send: Sender<TcpEvent> ) {
+  let mut buff = io::BufferedReader::new(reader.clone());
+  read_send.send(ConnCreat(*counter));
   loop {
     match buff.read_line() {
       Ok(a) => {
@@ -55,9 +56,15 @@ fn tcp_task_read( counter: &uint, reader: tcp::TcpStream, read_send: Sender<TcpE
       }
       Err(e) => match e.kind {
         io::EndOfFile => {
+          tcp_close_conn( &mut reader );
           read_send.send(ConnClose(*counter));
+          return;
         },
-        _ => (),
+        _ => {
+          tcp_close_conn( &mut reader );
+          read_send.send(ConnClose(*counter));
+          return;
+        }
       },
     };
   }
@@ -66,13 +73,33 @@ fn tcp_task_read( counter: &uint, reader: tcp::TcpStream, read_send: Sender<TcpE
 fn tcp_task_write( counter: &uint, mut writer: tcp::TcpStream, write_conn_send: Sender<TcpWriter> ) {
   let (conn_send, conn_recv) = channel();
   write_conn_send.send( (*counter, conn_send) );
+  match conn_recv.recv() {
+    ConnCreat(i) if i == *counter => { },
+    _ => {
+      tcp_close_conn( &mut writer );
+      return;
+    }
+  }
+
   loop {
     let line = match conn_recv.recv() {
-      Write(_, a) => a,
-      _ => continue,
+      Write(i, ref m) if i == *counter => m.clone(),
+      ConnClose(i) if i == *counter => {
+        tcp_close_conn( &mut writer );
+        return;
+      },
+      _ => {
+        tcp_close_conn( &mut writer );
+        return;
+      }
     };
     let _ = write!( writer, "{} {}", line, counter );
   }
+}
+
+fn tcp_close_conn( tcp_stream: &mut tcp::TcpStream ) {
+  tcp_stream.close_read();
+  tcp_stream.close_write();
 }
 
 fn tcp_listen( ip: &str, port: u16, conn_send: Sender<tcp::TcpStream>, err_send: Sender<io::IoError> ) {
