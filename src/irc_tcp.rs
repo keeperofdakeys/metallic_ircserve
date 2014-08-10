@@ -24,7 +24,6 @@ pub fn get_tcp_comms( ip: &str, port: u16 ) -> (Receiver<TcpMsg>, Sender<TcpMsg>
   let (conn_send, conn_recv) = channel();
   let ip_new = ip.to_string();
   spawn( proc() {
-    //let mut io_ref = LocalIo::borrow().unwrap();
     tcp_listen(ip_new.as_slice(), port, conn_send, err_send);
   }
   );
@@ -50,11 +49,15 @@ fn tcp_write_manager( write_recv: Receiver<TcpMsg>, write_conn_recv: Receiver<Tc
         write_conn_wait.send( () );
       },
       (i, event) = write_recv.recv() => {
-        match conns.find_mut(&i) {
+        match conns.find(&i) {
           Some(m) => {
             m.send(event);
           },
           None => ()
+        }
+        match event {
+          ConnClose => { conns.remove(&i); },
+          _ => ()
         }
       }
     )
