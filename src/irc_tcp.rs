@@ -5,6 +5,8 @@ use std::string::String;
 use std::comm::{channel,Receiver,Sender};
 use std::io::{Acceptor, Listener};
 use std::collections::HashMap;
+use std::vec::Vec;
+use std::string;
 
 pub enum TcpEvent {
   ConnCreat,
@@ -77,13 +79,12 @@ fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<TcpM
 }
 
 fn tcp_task_read( counter: &uint, mut reader: tcp::TcpStream, read_send: Sender<TcpMsg> ) {
-  let mut buff = io::BufferedReader::new(reader.clone());
+  let mut buf = box () ([0, ..1024]);
+  let mut count: uint;
   read_send.send( (*counter, ConnCreat) );
   loop {
-    match buff.read_line() {
-      Ok(a) => {
-        read_send.send( (*counter, Read(a)) );
-      }
+    count = match reader.read( *buf ) {
+      Ok(a) => a,
       Err(e) => match e.kind {
         io::EndOfFile => {
           println!("read close")
@@ -96,8 +97,16 @@ fn tcp_task_read( counter: &uint, mut reader: tcp::TcpStream, read_send: Sender<
           read_send.send( (*counter, ConnClose) );
           return;
         }
-      },
+      }
     };
+    if count == 0 {
+      continue;
+    }
+    let line: String;
+    unsafe {
+      line = string::raw::from_utf8(Vec::from_slice(*buf));
+    }
+    read_send.send( (*counter, Read(line)) );
   }
 }
 
