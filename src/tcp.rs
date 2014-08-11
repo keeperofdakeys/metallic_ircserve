@@ -1,5 +1,5 @@
 extern crate rustrt;
-use std::io::net::tcp;
+use std::io::net::tcp::{TcpStream, TcpListener};
 use std::io;
 use std::string::String;
 use std::comm::{channel,Receiver,Sender};
@@ -64,7 +64,7 @@ fn tcp_write_manager( write_recv: Receiver<TcpMsg>, write_conn_recv: Receiver<Tc
   }
 }
 
-fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<TcpMsg>, write_conn_send: Sender<TcpWriter>, write_conn_wait: Receiver<()> ) {
+fn tcp_task_spawner( conn_recv: Receiver<TcpStream>, read_send: Sender<TcpMsg>, write_conn_send: Sender<TcpWriter>, write_conn_wait: Receiver<()> ) {
   let mut counter = 1u;
   for conn in conn_recv.iter() {
     let read = conn.clone();
@@ -81,7 +81,7 @@ fn tcp_task_spawner( conn_recv: Receiver<tcp::TcpStream>, read_send: Sender<TcpM
   }
 }
 
-fn tcp_task_read( counter: &uint, mut reader: tcp::TcpStream, read_send: Sender<TcpMsg> ) {
+fn tcp_task_read( counter: &uint, mut reader: TcpStream, read_send: Sender<TcpMsg> ) {
   let mut buf = box () ([0, ..1024]);
   let mut count: uint;
   read_send.send( (*counter, ConnCreat) );
@@ -113,7 +113,7 @@ fn tcp_task_read( counter: &uint, mut reader: tcp::TcpStream, read_send: Sender<
   }
 }
 
-fn tcp_task_write( counter: &uint, mut writer: tcp::TcpStream, write_recv: Receiver<TcpEvent> ) {
+fn tcp_task_write( counter: &uint, mut writer: TcpStream, write_recv: Receiver<TcpEvent> ) {
   match write_recv.recv() {
     ConnCreat => {
       let _ = writeln!( writer, "{} {}", counter, "haha");
@@ -141,13 +141,13 @@ fn tcp_task_write( counter: &uint, mut writer: tcp::TcpStream, write_recv: Recei
   }
 }
 
-fn tcp_close_conn( tcp_stream: &mut tcp::TcpStream ) {
+fn tcp_close_conn( tcp_stream: &mut TcpStream ) {
   tcp_stream.close_read();
   tcp_stream.close_write();
 }
 
-fn tcp_listen( ip: &str, port: u16, conn_send: Sender<tcp::TcpStream>, err_send: Sender<io::IoError> ) {
-  let listener = match tcp::TcpListener::bind(ip, port) {
+fn tcp_listen( ip: &str, port: u16, conn_send: Sender<TcpStream>, err_send: Sender<io::IoError> ) {
+  let listener = match TcpListener::bind(ip, port) {
     Ok(m) => { m }
     Err(e) => {
       err_send.send(e);

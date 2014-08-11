@@ -1,2 +1,2 @@
-mod irc_tcp;
+mod tcp;
 pub mod irc;
