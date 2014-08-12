@@ -2,7 +2,7 @@ extern crate rustrt;
 use std::io::net::tcp::{TcpStream, TcpListener};
 use std::io;
 use std::string::String;
-use std::comm::{channel,Receiver,Sender};
+use std::comm::{channel, Receiver, Sender, SyncSender};
 use std::io::{Acceptor, Listener};
 use std::collections::HashMap;
 use std::vec::Vec;
@@ -15,76 +15,44 @@ pub enum TcpEvent {
   ConnClose
 }
 
-pub type TcpMsg = (uint, TcpEvent);
+pub type WorkerPipe<'a> = proc():Send -> |x: Sender<TcpEvent>, y: Receiver<TcpEvent>|:'a -> proc():Send;
+pub type WorkerProc = proc(Sender<TcpEvent>, Receiver<TcpEvent>):Send -> proc():Send;
+pub type WorkerProcSender = SyncSender< WorkerProc >;
+pub type WorkerProcReceiver = Receiver< WorkerProc >;
 
-pub type TcpWriter = (uint, Sender<TcpEvent>);
-
-pub fn get_tcp_comms( ip: &str, port: u16 ) -> (Receiver<TcpMsg>, Sender<TcpMsg>) {
+pub fn start_tcp_handler( ip: &str, port: u16, worker_recv: WorkerProcReceiver ) {
   let (err_send, err_recv) = channel();
   let (conn_send, conn_recv) = channel();
   let ip_new = ip.to_string();
   spawn( proc() {
-    tcp_listen(ip_new.as_slice(), port, conn_send, err_send);
+    tcp_listen( ip_new.as_slice(), port, conn_send, err_send );
   }
   );
 
-  let (read_send, read_recv) = channel();
-  let (write_send, write_recv) = channel();
-  let (write_conn_send, write_conn_recv) = channel();
-  let (write_wait_send, write_wait_recv) = channel();
+  spawn(proc() { tcp_task_spawner( conn_recv, worker_recv ) } );
 
-  spawn(proc() { tcp_task_spawner( conn_recv, read_send, write_conn_send, write_wait_recv ) } );
-  spawn(proc() { tcp_write_manager( write_recv, write_conn_recv, write_wait_send ) } );
-
-  return (read_recv, write_send);
-  
 }
 
-fn tcp_write_manager( write_recv: Receiver<TcpMsg>, write_conn_recv: Receiver<TcpWriter>, write_conn_wait: Sender<()> ) {
-  let mut conns = HashMap::new();
-  loop {
-    select!(
-      (i, writer) = write_conn_recv.recv() => {
-        conns.insert(i, writer);
-        write_conn_wait.send( () );
-      },
-      (i, event) = write_recv.recv() => {
-        match conns.find(&i) {
-          Some(m) => {
-            m.send(event);
-          },
-          None => ()
-        }
-        match event {
-          ConnClose => { conns.remove(&i); },
-          _ => ()
-        }
-      }
-    )
-  }
-}
-
-fn tcp_task_spawner( conn_recv: Receiver<TcpStream>, read_send: Sender<TcpMsg>, write_conn_send: Sender<TcpWriter>, write_conn_wait: Receiver<()> ) {
+fn tcp_task_spawner( conn_recv: Receiver<TcpStream>, worker_recv: WorkerProcReceiver ) {
   let mut counter = 1u;
   for conn in conn_recv.iter() {
     let read = conn.clone();
     let write = conn.clone();
-    let read_send_c = read_send.clone();
-    let write_conn_send_c = write_conn_send.clone();
-
+    
+    let (read_send, read_recv) = channel();
     let (write_send, write_recv) = channel();
-    write_conn_send.send( (counter, write_send) );
-    write_conn_wait.recv();
-    spawn(proc() { tcp_task_read( &counter, read, read_send_c ) });
-    spawn(proc() { tcp_task_write( &counter, write, write_recv ) });
+    let worker_proc = worker_recv.recv();
+    spawn( proc() { tcp_task_read( &counter, read, read_send ) } );
+    spawn( worker_proc( write_send, read_recv ) );
+    spawn( proc() { tcp_task_write( &counter, write, write_recv ) } );
     counter += 1;
   }
 }
 
-fn tcp_task_read( counter: &uint, mut reader: TcpStream, read_send: Sender<TcpMsg> ) {
+fn tcp_task_read( counter: &uint, mut reader: TcpStream, read_send: Sender<TcpEvent> ) {
   let mut buf = box () ([0, ..1024]);
   let mut count: uint;
-  read_send.send( (*counter, ConnCreat) );
+  read_send.send( ConnCreat );
   loop {
     count = match reader.read( *buf ) {
       Ok(a) => a,
@@ -92,12 +60,12 @@ fn tcp_task_read( counter: &uint, mut reader: TcpStream, read_send: Sender<TcpMs
         io::EndOfFile => {
           println!("read close")
           tcp_close_conn( &mut reader );
-          read_send.send( (*counter, ConnClose) );
+          read_send.send( ConnClose );
           return;
         },
         _ => {
           tcp_close_conn( &mut reader );
-          read_send.send( (*counter, ConnClose) );
+          read_send.send( ConnClose );
           return;
         }
       }
@@ -105,11 +73,12 @@ fn tcp_task_read( counter: &uint, mut reader: TcpStream, read_send: Sender<TcpMs
     if count == 0 {
       continue;
     }
-    let line: String;
+    let mut line: String;
     unsafe {
       line = string::raw::from_utf8(Vec::from_slice(*buf));
     }
-    read_send.send( (*counter, Read(line)) );
+    line.truncate( count );
+    read_send.send( Read(line) );
   }
 }
 
@@ -168,9 +137,3 @@ fn tcp_listen( ip: &str, port: u16, conn_send: Sender<TcpStream>, err_send: Send
     };
   }
 }
-
-/*
-fn tcp_listen<'a>( io: &'a mut rustrt::rtio::IoFactory, ip: IpAddr, port: u16 ) -> Option<Box<rustrt::rtio::RtioTcpStream+Send>> {
-  let listener = match io.tcp_bind(SocketAddr{ip: ip, port: port}) {
-*/
-
