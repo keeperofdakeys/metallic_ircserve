@@ -59,13 +59,14 @@ fn tcp_task_read( counter: &uint, mut reader: TcpStream, read_send: Sender<TcpEv
       Err(e) => match e.kind {
         io::EndOfFile => {
           println!("read close")
-          tcp_close_conn( &mut reader );
-          read_send.send( ConnClose );
+          reader.close_read();
+          read_send.send_opt( ConnClose );
           return;
         },
         _ => {
-          tcp_close_conn( &mut reader );
-          read_send.send( ConnClose );
+          reader.close_read();
+          reader.close_write();
+          read_send.send_opt( ConnClose );
           return;
         }
       }

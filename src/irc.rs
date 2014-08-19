@@ -44,6 +44,10 @@ struct Channel {
   users: Vec<String>
 }
 
+struct User {
+  a: int
+}
+
 fn start_irc() {
   let irc_conf = IRCConfig::new();
   let (worker_send, worker_recv) = sync_channel(0);
@@ -60,7 +64,24 @@ fn irc_worker_gen( irc_struct: IRCConfig, worker_send: WorkerProcSender ) {
 }
 
 fn irc_worker_pipe( irc_struct: IRCConfig, write_send: Sender<TcpEvent>, read_recv: Receiver<TcpEvent> ) {
+  match read_recv.recv() {
+    ConnCreat => {
+      write_send.send( ConnCreat )
+    },
+    _ => {
+      drop_conn( &write_send );
+      return;
+    }
+  }
   // Authenticate user -> add writer to writer_map in irc_struct
+  let user = match accept_conn( &read_recv, &write_send ) {
+    Some(a) => a,
+    None => {
+      drop_conn( &write_send );
+      return;
+    }
+  };
+  write_send.send( Write( user ) );
 
   // loop over lines from line_reader
     // Find sense from the mess
@@ -86,9 +107,34 @@ fn irc_worker_pipe( irc_struct: IRCConfig, write_send: Sender<TcpEvent>, read_re
         return;
       },
       Write(_) => {
+        // We should never get write, close connection now.
+        write_send.send( ConnClose );
         return;
       }
     };
     print!("{}", line);
   }
+}
+
+fn accept_conn( read_recv: &Receiver<TcpEvent>, write_send: &Sender<TcpEvent> ) -> Option<String> {
+  let line = match (*read_recv).recv() {
+    Read(a) => a,
+    _ => return None
+  };
+  if line.as_slice().starts_with( "nick" ) {
+    let offset = match line.as_slice().find(':') {
+      Some(a) => a,
+      None => return None
+    };
+    let nick = line.as_slice().slice_from( offset+1 );
+    Some( nick.to_string() )
+  } else {
+    None
+  }
+}
+
+fn drop_conn( write_send: &Sender<TcpEvent> ) {
+  (*write_send).send( Write( "Dropping Connection".to_string() ) );
+  (*write_send).send( ConnClose );
+  println!("A-OK");
 }
