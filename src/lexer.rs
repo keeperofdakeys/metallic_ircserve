@@ -4,10 +4,10 @@ use std::option::Option;
 struct Message {
   prefix: Option<Vec<u8>>,
   command: Vec<u8>,
-  prefixes: Vec<Vec<u8>>
+  params: Vec<Vec<u8>>
 }
 
-type RawMessage = Vec<u8>;
+type ByteString = Vec<u8>;
 
 fn vec_get<'a, T>( vec: &'a Vec<T>, pos: uint ) -> Option<&'a T> {
   if vec.len() >= pos + 1 {
@@ -17,20 +17,28 @@ fn vec_get<'a, T>( vec: &'a Vec<T>, pos: uint ) -> Option<&'a T> {
   }
 }
 
-fn lex_msg( msg: RawMessage ) -> Result<Message, ()> {
-  let test_none: Vec<u8> = Vec::new();
-  let prefix_present = match vec_get(&msg, 0) {
-    Some(m) if m == &(':' as u8) => true,
-    None => return Err(()),
-    _ => false
-  };
+fn lex_prefix( msg: &mut Vec<u8> ) -> Option<Vec<u8>> {
+  None
+  //Some(m) if m == &(':' as u8) => true,
+  //let prefix_index = match msg.iter().position(|x| x == &(' ' as u8)) {
+}
 
-  let prefix_index = match msg.iter().position(|x| x == &(' ' as u8)) {
-    Some(i) => i,
+fn lex_command( msg: &mut Vec<u8> ) -> Option<Vec<u8>> {
+  None
+}
+
+fn lex_params( msg: &mut Vec<u8> ) -> Vec<Vec<u8>> {
+  Vec::new()
+}
+
+fn lex_msg( mut msg: Vec<u8> ) -> Result<Message, ()> {
+  let prefix = lex_prefix( &mut msg );
+  let command = match lex_command( &mut msg ) {
+    Some(m) => m,
     None => return Err(())
   };
+  let params = lex_params( &mut msg );
 
-  //Message{prefix: None, command: test_none.clone(), prefixes: Vec::new()};
-  Err(())
+  Ok(Message{prefix: prefix, command: command, params: params})
 }
 
