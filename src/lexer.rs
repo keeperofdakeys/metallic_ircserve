@@ -46,7 +46,18 @@ fn lex_command( msg: &mut Vec<u8> ) -> Option<Vec<u8>> {
 }
 
 fn lex_params( msg: &mut Vec<u8> ) -> Vec<Vec<u8>> {
-  Vec::new()
+  let mut params = Vec::new();
+  while msg.len() > 1 {
+    let param_end = match msg.iter().position( |&x| x == ' ' as u8 ) {
+      Some(i) => i,
+      None => msg.len() - 1
+    };
+    params.push( Vec::from_slice( msg.slice_to( param_end ) ) );
+    let new_msg = Vec::from_slice( msg.slice_from( param_end + 1 ) );
+    msg.truncate( 0 );
+    msg.push_all_move( new_msg );
+  }
+  params
 }
 
 fn lex_msg( in_msg: Vec<u8> ) -> Result<Message, ()> {
@@ -63,11 +74,23 @@ fn lex_msg( in_msg: Vec<u8> ) -> Result<Message, ()> {
 
 fn test_prefix() {
   let mut vec = vec!(':' as u8, 3, 2, ' ' as u8, 4);
-  println!( "1 {}", vec );
-  println!( "3 {}", lex_prefix(&mut vec).unwrap());
-  println!( "2 {}", vec );
+  println!( "{}", lex_prefix(&mut vec).unwrap());
+}
+
+fn test_command() {
+  let mut vec = vec!('a' as u8, 'c' as u8, ' ' as u8, 4);
+  println!( "{}", lex_command(&mut vec).unwrap());
+}
+
+fn test_lex() {
+  let mut vec = vec!(':' as u8, 1, 2, ' ' as u8, 3, 4, ' ' as u8, 4, 5, '\n' as u8);
+  println!( "{}", vec );
+  let msg = lex_msg( vec ).unwrap();
+  println!( "{} {} {}", msg.prefix.unwrap(), msg.command, msg.params );
 }
 
 fn main() {
   test_prefix();
+  test_command();
+  test_lex();
 }
