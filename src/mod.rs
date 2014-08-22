@@ -1,2 +1,4 @@
-mod tcp;
-pub mod irc;
+pub mod lexer;
+//mod tcp;
+//mod irc;
+mod parse;

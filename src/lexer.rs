@@ -1,5 +1,6 @@
 use std::result::Result;
 use std::option::Option;
+use parse::{digit_char, letter_char};
 
 struct Message<'a> {
   prefix: Option<&'a [u8]>,
@@ -7,92 +8,65 @@ struct Message<'a> {
   params: Vec<&'a [u8]>
 }
 
-fn no_spec_char( char: u8 ) -> bool {
-  match char {
-    0x01..0x09 => true,
-    0x0B..0x0C => true,
-    0x0E..0x1F => true,
-    0x21..0x39 => true,
-    0x3B..0xFF => true,
-    _ => false
+enum POption<T> {
+  Prefix(T),
+  NoPrefix,
+  ErrPrefix
+}
+
+impl<T> POption<T> {
+  fn unwrap<'a>( &'a self ) -> &'a T {
+    match *self {
+      Prefix(ref p) => p,
+      NoPrefix => fail!("No Prefix"),
+      ErrPrefix => fail!("Error"),
+    }
   }
 }
 
-fn user_char( char: u8 ) -> bool {
-  match char {
-    0x01..0x09 => true,
-    0x0B..0x0C => true,
-    0x0E..0x1F => true,
-    0x21..0x3F => true,
-    0x41..0xFF => true,
-    _ => false
-  }
-}
-
-fn key_char( char: u8 ) -> bool {
-  match char {
-    0x01..0x05 => true,
-    0x07..0x08 => true,
-    0x0C => true,
-    0x0E..0x1F => true,
-    0x21..0x7F => true,
-    _ => false
-  }
-}
-
-fn letter_char( char: u8 ) -> bool {
-  match char {
-    0x41..0x5A => true,
-    0x61..0x7A => true,
-    _ => false
-  }
-}
-
-fn digit_char( char: u8 ) -> bool {
-  match char {
-    0x30..0x39 => true,
-    _ => false
-  }
-}
-
-fn hexdigit_char( char: u8 ) -> bool {
-  match char {
-    0x30..0x39 => true,
-    0x41..0x46 => true,
-    _ => false
-  }
-}
-
-fn special_char( char: u8 ) -> bool {
-  match char {
-    0x5B..0x60 => true,
-    0x7B..0x7D => true,
-    _ => false
-  }
-}
-
-fn lex_prefix<'a>( msg_ref: &mut &'a [u8] ) -> Option<&'a [u8]> {
+fn lex_prefix<'a>( msg_ref: &mut &'a [u8] ) -> POption<&'a [u8]> {
   let msg = *msg_ref;
   match  msg.get( 0 ) {
     Some(m) if *m == ':' as u8 => {},
-    _ => return None
+    _ => return NoPrefix
   };
-  let prefix_end = match msg.iter().skip(1).position( |&x| !no_spec_char( x ) ) {
-    Some(i) => i + 1,
-    None => return None
+  let prefix_end = match msg.iter().skip(1).position( |&x| x == ' ' as u8 ) {
+    Some(i) => i + 1, // Accout for skip.
+    None => return ErrPrefix
+  };
+  if prefix_end + 1 >= msg.len() {
+    return ErrPrefix;
+  }
+  match msg.get( prefix_end + 1 ) {
+    None => return ErrPrefix,
+    _ => {}
   };
   let prefix = msg.slice( 1, prefix_end );
   let new_msg = msg.slice_from( prefix_end + 1 );
   *msg_ref = new_msg;
-  Some( prefix )
+  Prefix( prefix )
 }
 
 fn lex_command<'a>( msg_ref: &mut &'a [u8] ) -> Option<&'a [u8]> {
   let msg = *msg_ref;
-  let command_end = match msg.iter().skip(1).position( |&x| x == ' ' as u8 ) {
-    Some(i) => i + 1,
-    None => msg.len() - 2
+  let command_end = match msg.get( 0 ) {
+    Some(d) if digit_char( d ) => {
+      match msg.iter().position( |x| !digit_char(x) ) {
+        Some(i) if i == 3 => i,
+        _ => return None
+      }
+    }
+    Some(c) if letter_char( c ) => {
+      match msg.iter().position( |x| !letter_char(x) ) {
+        Some(i) => i,
+        None => return None
+      }
+    }
+    _ => return None
   };
+  if command_end + 1 >= msg.len() {
+    return None;
+  }
   let command = msg.slice_to( command_end );
   let new_msg = msg.slice_from( command_end + 1 );
   *msg_ref = new_msg;
@@ -103,7 +77,7 @@ fn lex_params<'a>( msg_ref: &mut &'a [u8] ) -> Vec<&'a [u8]> {
   let mut params = Vec::new();
   let mut msg = *msg_ref;
   while msg.len() > 1 {
-    let param_end = match msg.iter().position( |&x| !no_spec_char( x ) ) {
+    let param_end = match msg.iter().position( |&x| x == ' ' as u8 ) {
       Some(i) => i,
       None => msg.len() - 1
     };
@@ -115,7 +89,11 @@ fn lex_params<'a>( msg_ref: &mut &'a [u8] ) -> Vec<&'a [u8]> {
 
 fn lex_msg<'a>( in_msg: &'a [u8] ) -> Result<Message<'a>, ()> {
   let mut msg = in_msg;
-  let prefix = lex_prefix( &mut msg );
+  let prefix = match lex_prefix( &mut msg ) {
+    Prefix(p) => Some(p),
+    NoPrefix => None,
+    ErrPrefix => return Err( () )
+  };
   let command = match lex_command( &mut msg ) {
     Some(m) => m,
     None => return Err( () )
@@ -136,11 +114,19 @@ fn test_command() {
 }
 
 fn test_lex() {
-  let vec = vec!(':' as u8, 1, 2, ' ' as u8, 3, 4, ' ' as u8, 4, 5, '\n' as u8);
-  let msg = lex_msg( vec.as_slice() ).unwrap();
-  println!( "{} {} {}", msg.prefix.unwrap(), msg.command, msg.params );
+  let mut vec = vec!(':' as u8, 1, 2, ' ' as u8, 'a' as u8, 'b' as u8, ' ' as u8, 4, 5, '\n' as u8);
+  {
+    let msg = lex_msg( vec.as_slice() ).unwrap();
+    println!( "{} {} {}", msg.prefix.unwrap(), msg.command, msg.params );
+  }
+  vec = vec!(':' as u8, 1, 2, ' ' as u8, '1' as u8, '2' as u8, '3' as u8, ' ' as u8, 4, 5, '\n' as u8);
+  {
+    let msg = lex_msg( vec.as_slice() ).unwrap();
+    println!( "{} {} {}", msg.prefix.unwrap(), msg.command, msg.params );
+  }
 }
 
+#[main]
 fn main() {
   test_prefix();
   test_command();
