@@ -1,59 +1,115 @@
+use lexer::LexerMsg;
+
 enum Prefix {
   ServerName(String),
-  User_(String),
-  UserHost_(String, String)
+  User(String),
+  UserHost(String, String)
 }
 
 enum Command {
-  Password,
-  Nickname,
-  User,
-  Oper,
-  UserMode,
-  Service,
-  Quit,
-  SQuit,
-  Join,
-  Part,
-  ChanMode,
-  Topic,
-  Names,
-  List,
-  Invite,
-  Kick,
-  PrivateMsg,
-  Notice,
-  MsgOfTheDay,
-  LUsers,
-  Version,
-  Stats,
-  Links,
-  Time,
-  Connect,
-  Trace,
-  Admin,
-  Info,
-  ServiceList,
-  ServiceQuery,
-  Who,
-  WhoIs,
-  WhoWas,
-  Kill,
-  Ping,
-  Pong,
-  Error,
-  Away,
-  ReHash,
-  Die,
-  Restart,
-  Summon,
-  Users,
-  OperWall,
-  UserHost,
-  IsOn
+  CmdPassword,
+  CmdNickname,
+  CmdUser,
+  CmdOper,
+  CmdMode,
+  CmdService,
+  CmdQuit,
+  CmdSQuit,
+  CmdJoin,
+  CmdPart,
+  CmdTopic,
+  CmdNames,
+  CmdList,
+  CmdInvite,
+  CmdKick,
+  CmdPrivateMsg,
+  CmdNotice,
+  CmdMsgOfTheDay,
+  CmdLUsers,
+  CmdVersion,
+  CmdStats,
+  CmdLinks,
+  CmdTime,
+  CmdConnect,
+  CmdTrace,
+  CmdAdmin,
+  CmdInfo,
+  CmdServiceList,
+  CmdServiceQuery,
+  CmdWho,
+  CmdWhoIs,
+  CmdWhoWas,
+  CmdKill,
+  CmdPing,
+  CmdPong,
+  CmdError,
+  CmdAway,
+  CmdReHash,
+  CmdDie,
+  CmdRestart,
+  CmdSummon,
+  CmdUsers,
+  CmdOperWall,
+  CmdUserHost,
+  CmdIsOn
 }
 
-struct Msg {
+fn parse_cmd( buf_cmd: &[u8] ) -> Option<Command> {
+  match as_lowercase( buf_cmd ).as_slice() {
+    b"pass" => Some(CmdPassword),
+    b"nick" => Some(CmdNickname),
+    b"user" => Some(CmdUser),
+    b"oper" => Some(CmdOper),
+    b"mode" => Some(CmdMode),
+    b"service" => Some(CmdService),
+    b"quit" => Some(CmdQuit),
+    b"squit" => Some(CmdSQuit),
+    b"join" => Some(CmdJoin),
+    b"part" => Some(CmdPart),
+    b"topic" => Some(CmdTopic),
+    b"names" => Some(CmdNames),
+    b"list" => Some(CmdList),
+    b"invite" => Some(CmdInvite),
+    b"kick" => Some(CmdKick),
+    b"privmsg" => Some(CmdPrivateMsg),
+    b"notice" => Some(CmdNotice),
+    b"motd" => Some(CmdMsgOfTheDay),
+    b"lusers" => Some(CmdLUsers),
+    b"version" => Some(CmdVersion),
+    b"stats" => Some(CmdStats),
+    b"links" => Some(CmdLinks),
+    b"time" => Some(CmdTime),
+    b"connect" => Some(CmdConnect),
+    b"trace" => Some(CmdTrace),
+    b"admin" => Some(CmdAdmin),
+    b"info" => Some(CmdInfo),
+    b"servlist" => Some(CmdServiceList),
+    b"squery" => Some(CmdServiceQuery),
+    b"who" => Some(CmdWho),
+    b"whois" => Some(CmdWhoIs),
+    b"whowas" => Some(CmdWhoWas),
+    b"kill" => Some(CmdKill),
+    b"ping" => Some(CmdPing),
+    b"pong" => Some(CmdPong),
+    b"error" => Some(CmdError),
+    b"away" => Some(CmdAway),
+    b"rehash" => Some(CmdReHash),
+    b"die" => Some(CmdDie),
+    b"restart" => Some(CmdRestart),
+    b"summon" => Some(CmdSummon),
+    b"users" => Some(CmdUsers),
+    b"wallops" => Some(CmdOperWall),
+    b"userhost" => Some(CmdUserHost),
+    b"ison" => Some(CmdIsOn),
+    _ => None
+  }
+}
+
+fn parse_msg( msg: LexerMsg ) -> Result<ParseMsg, ()> {
+  Err( () )
+}
+
+struct ParseMsg {
   command: Command,
   prefix: Prefix,
   params: Vec<String>,
@@ -121,4 +177,15 @@ pub fn special_char( char: &u8 ) -> bool {
     0x7B..0x7D => true,
     _ => false
   }
+}
+
+fn as_lowercase( bytes: &[u8] ) -> Vec<u8> {
+  let mut new_bytes = Vec::with_capacity( bytes.len() );
+  for c in bytes.iter() {
+    new_bytes.push( match *c {
+      0x41..0x5A => c ^ 0x20,
+      a => a
+    } );
+  }
+  new_bytes
 }

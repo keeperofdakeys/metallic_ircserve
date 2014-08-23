@@ -2,7 +2,7 @@ use std::result::Result;
 use std::option::Option;
 use parse::{digit_char, letter_char, no_spec_char};
 
-struct Message<'a> {
+pub struct LexerMsg<'a> {
   prefix: Option<&'a [u8]>,
   command: &'a [u8],
   params: Vec<&'a [u8]>
@@ -74,7 +74,7 @@ fn lex_command<'a>( msg_ref: &mut &'a [u8] ) -> Option<&'a [u8]> {
 }
 
 fn lex_param<'a>( msg_ref: &mut &'a[u8], trailing: bool ) -> Option<&'a [u8]> {
-  let mut msg = *msg_ref;
+  let msg = *msg_ref;
   let test = match trailing {
     true => |x| !no_spec_char(x) && *x != ' ' as u8 && *x != ':' as u8,
     false => |x| !no_spec_char(x) && *x != ':' as u8
@@ -111,7 +111,7 @@ fn lex_params<'a>( msg_ref: &mut &'a [u8] ) -> Vec<&'a [u8]> {
         }
         break
       }
-      Some(c) => {
+      Some(_) => {
         msg = msg.slice_from( 1 );
         match lex_param( &mut msg, false ) {
           Some(p) => params.push(p),
@@ -124,7 +124,7 @@ fn lex_params<'a>( msg_ref: &mut &'a [u8] ) -> Vec<&'a [u8]> {
   params
 }
 
-fn lex_msg<'a>( in_msg: &'a [u8] ) -> Result<Message<'a>, ()> {
+fn lex_msg<'a>( in_msg: &'a [u8] ) -> Result<LexerMsg<'a>, ()> {
   let mut msg = in_msg;
   let prefix = match lex_prefix( &mut msg ) {
     Prefix(p) => Some(p),
@@ -137,7 +137,7 @@ fn lex_msg<'a>( in_msg: &'a [u8] ) -> Result<Message<'a>, ()> {
   };
   let params = lex_params( &mut msg );
 
-  Ok( Message{ prefix: prefix, command: command, params: params } )
+  Ok( LexerMsg{ prefix: prefix, command: command, params: params } )
 }
 
 fn test_prefix() {
