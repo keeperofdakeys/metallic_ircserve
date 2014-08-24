@@ -1,9 +1,30 @@
 use lexer::LexerMsg;
+use lexer::POption;
 
-enum Prefix {
-  ServerName(String),
-  User(String),
-  UserHost(String, String)
+struct ParseMsg<'a> {
+  prefix: Option<&'a [u8]>,
+  command: Command,
+  params: Vec<&'a [u8]>,
+}
+
+fn parse_msg( msg: LexerMsg ) -> Result<ParseMsg, ()> {
+  let prefix = parse_prefix( msg.prefix );
+  let cmd = match parse_cmd( msg.command ) {
+    Some(c) => c,
+    None => return Err( () )
+  };
+  let params = parse_params( msg.params );
+
+  Ok( ParseMsg{ prefix: prefix, command: cmd, params: params } )
+}
+
+fn parse_prefix( buf_prefix: Option<&[u8]> ) -> Option<&[u8]> {
+  buf_prefix
+}
+
+fn parse_params( buf_params: Vec<&[u8]> ) -> Vec<&[u8]> {
+  //buf_params.iter().map( |x| Vec::from_slice( *x ) ).collect()
+  buf_params
 }
 
 enum Command {
@@ -105,15 +126,6 @@ fn parse_cmd( buf_cmd: &[u8] ) -> Option<Command> {
   }
 }
 
-fn parse_msg( msg: LexerMsg ) -> Result<ParseMsg, ()> {
-  Err( () )
-}
-
-struct ParseMsg {
-  command: Command,
-  prefix: Prefix,
-  params: Vec<String>,
-}
 
 pub fn no_spec_char( char: &u8 ) -> bool {
   match *char {

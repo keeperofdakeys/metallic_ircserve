@@ -3,12 +3,12 @@ use std::option::Option;
 use parse::{digit_char, letter_char, no_spec_char};
 
 pub struct LexerMsg<'a> {
-  prefix: Option<&'a [u8]>,
-  command: &'a [u8],
-  params: Vec<&'a [u8]>
+  pub prefix: Option<&'a [u8]>,
+  pub command: &'a [u8],
+  pub params: Vec<&'a [u8]>
 }
 
-enum POption<T> {
+pub enum POption<T> {
   Prefix(T),
   NoPrefix,
   ErrPrefix
