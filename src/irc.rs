@@ -11,9 +11,14 @@ fn start(argc: int, argv: *const *const u8) -> int {
     green::start(argc, argv, rustuv::event_loop, start_irc)
 }
 
-struct IRCConfig {
+pub struct IRCConfig {
   channels: Arc<Mutex<HashMap<String, Channel>>>,
   users: Arc<Mutex<HashMap<String, Sender<TcpEvent>>>>
+}
+
+pub enum Destination {
+  DestChan( Channel ),
+  DestUser( User )
 }
 
 impl IRCConfig {
@@ -22,6 +27,10 @@ impl IRCConfig {
       channels: Arc::new(Mutex::new(HashMap::new())),
       users: Arc::new(Mutex::new(HashMap::new()))
     }
+  }
+
+  pub fn send_msg( &self, dest: &[u8], msg: &[u8] ) -> Result<(), ()>{
+    Err( () )
   }
 }
 
@@ -33,7 +42,7 @@ impl Clone for IRCConfig {
     }
   }
 
-  fn clone_from(&mut self, source: &IRCConfig) {
+  fn clone_from( &mut self, source: &IRCConfig ) {
     self.channels = source.channels.clone();
     self.users = source.users.clone();
   }

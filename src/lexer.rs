@@ -163,9 +163,11 @@ fn test_lex() {
   }
 }
 
+/*
 #[main]
 fn main() {
   test_prefix();
   test_command();
   test_lex();
 }
+*/

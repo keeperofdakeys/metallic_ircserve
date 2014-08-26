@@ -27,7 +27,7 @@ fn parse_params( buf_params: Vec<&[u8]> ) -> Vec<&[u8]> {
   buf_params
 }
 
-enum Command {
+pub enum Command {
   CmdPassword,
   CmdNickname,
   CmdUser,
