@@ -29,8 +29,12 @@ impl IRCConfig {
     }
   }
 
-  pub fn send_msg( &self, dest: &[u8], msg: &[u8] ) -> Result<(), ()>{
+  pub fn send_msg<T: IRCSender>( &self, sender: T, dest: &[u8], msg: &[u8] ) -> Result<(), ()>{
     Err( () )
+  }
+
+  pub fn kill_user( &self, user: User ) {
+    user.send_msg( ConnClose );
   }
 }
 
@@ -48,15 +52,38 @@ impl Clone for IRCConfig {
   }
 }
 
-struct Channel {
+trait IRCSender {
+  fn get_sender( &self ) -> &str;
+}
+
+pub struct Channel {
   name: String,
   users: Vec<String>
 }
 
-struct User {
-  a: int
+impl IRCSender for Channel {
+  fn get_sender<'a>( &self ) -> &'a str {
+    "hi"
+  }
 }
 
+pub struct User {
+  a: int,
+  nick: String,
+  sender: Sender<TcpEvent>
+}
+
+impl User {
+  pub fn send_msg( &self, msg: TcpEvent ) {
+    self.sender.send( msg );
+  }
+}
+
+impl IRCSender for User {
+  fn get_sender<'a>( &self ) -> &'a str {
+    "hi"
+  }
+}
 fn start_irc() {
   let irc_conf = IRCConfig::new();
   let (worker_send, worker_recv) = sync_channel(0);
